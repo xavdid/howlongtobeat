@@ -104,7 +104,7 @@ The `detail()` method will return a `Promise` with an `HowLongToBeatEntry`. If t
 
 ## Time Labels
 
-HLTB has 7 differents ways to count games hours, here they are:
+HLTB has 7 different ways to count games hours, here they are:
 
 * Main Story
 * Main + Extras

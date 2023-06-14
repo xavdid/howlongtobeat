@@ -78,7 +78,8 @@ export class HltbSearch {
           headers: {
             'content-type': 'application/json',
             'origin': 'https://howlongtobeat.com/',
-            'referer': 'https://howlongtobeat.com/'
+            'referer': 'https://howlongtobeat.com/',
+            'user-agent': new UserAgent()
           },
           timeout: 20000,
           signal,

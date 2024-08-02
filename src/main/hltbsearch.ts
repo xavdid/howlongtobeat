@@ -8,7 +8,9 @@ const UserAgent: any = require('user-agents');
 export class HltbSearch {
   public static BASE_URL: string = 'https://howlongtobeat.com/';
   public static DETAIL_URL: string = `${HltbSearch.BASE_URL}game?id=`;
-  public static SEARCH_URL: string = `${HltbSearch.BASE_URL}api/search`;
+  // this smells like they don't want people hitting this endpoint
+  // pulled from the network tab on 2024-08-01; it may change again
+  public static SEARCH_URL: string = `${HltbSearch.BASE_URL}api/search/4b4cbe570602c88660f7df8ea0cb6b6e`;
   public static IMAGE_URL: string = `${HltbSearch.BASE_URL}games/`;
 
   payload: any = {

@@ -106,7 +106,9 @@ class HltbSearch {
 }
 HltbSearch.BASE_URL = 'https://howlongtobeat.com/';
 HltbSearch.DETAIL_URL = `${HltbSearch.BASE_URL}game?id=`;
-HltbSearch.SEARCH_URL = `${HltbSearch.BASE_URL}api/search`;
+// this smells like they don't want people hitting this endpoint
+// pulled from the network tab on 2024-08-01; it may change again
+HltbSearch.SEARCH_URL = `${HltbSearch.BASE_URL}api/search/4b4cbe570602c88660f7df8ea0cb6b6e`;
 HltbSearch.IMAGE_URL = `${HltbSearch.BASE_URL}games/`;
 exports.HltbSearch = HltbSearch;
 //# sourceMappingURL=hltbsearch.js.map

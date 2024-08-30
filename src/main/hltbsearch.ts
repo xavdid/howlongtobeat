@@ -1,18 +1,22 @@
 const axios: any = require("axios");
 const UserAgent: any = require("user-agents");
+const cheerio: any = require("cheerio");
 
 /**
  * Takes care about the http connection and response handling
  */
 export class HltbSearch {
+  protected searchKey: string;
+
   public static BASE_URL: string = "https://howlongtobeat.com/";
   public static DETAIL_URL: string = `${HltbSearch.BASE_URL}game?id=`;
-  // this smells like they don't want people hitting this endpoint
-  // pulled from the network tab on 2024-08-01; it may change again
-  public static SEARCH_URL: string = `${HltbSearch.BASE_URL}api/search/5683ebd079f1c360`;
+  public static SEARCH_URL: string = `${HltbSearch.BASE_URL}api/search/`;
   public static IMAGE_URL: string = `${HltbSearch.BASE_URL}games/`;
 
-  payload: any = {
+  private static readonly SEARCH_KEY_PATTERN =
+    /"\/api\/search\/".concat\("([a-zA-Z0-9]+)"\)/g;
+
+  payload = {
     searchType: "games",
     searchTerms: [],
     searchPage: 1,
@@ -72,17 +76,25 @@ export class HltbSearch {
     }
   }
 
-  async search(query: Array<string>, signal?: AbortSignal): Promise<any> {
+  async search(
+    query: Array<string>,
+    signal?: AbortSignal,
+    retry = true
+  ): Promise<any> {
     // Use built-in javascript URLSearchParams as a drop-in replacement to create axios.post required data param
     let search = { ...this.payload };
     search.searchTerms = query;
     try {
-      let result = await axios.post(HltbSearch.SEARCH_URL, search, {
+      // only search scripts lazily
+      this.searchKey ||= await this.getSearchKey();
+      const searchUrlWithKey = HltbSearch.SEARCH_URL + this.searchKey;
+
+      let result = await axios.post(searchUrlWithKey, search, {
         headers: {
+          "User-Agent": new UserAgent().toString(),
           "content-type": "application/json",
           origin: "https://howlongtobeat.com/",
           referer: "https://howlongtobeat.com/",
-          "user-agent": new UserAgent(),
         },
         timeout: 20000,
         signal,
@@ -92,6 +104,11 @@ export class HltbSearch {
     } catch (error) {
       if (error) {
         throw new Error(error);
+      } else if (error.response.status === 404 && retry) {
+        // key maybe stale
+        this.searchKey = null;
+        // don't retry on the second one, could be a real 404
+        return this.search(query, signal, false);
       } else if (error.response.status !== 200) {
         throw new Error(`Got non-200 status code from howlongtobeat.com [${
           error.response.status
@@ -100,5 +117,48 @@ export class HltbSearch {
         `);
       }
     }
+  }
+
+  private async getSearchKey(): Promise<string> {
+    const res = await axios.get(HltbSearch.BASE_URL, {
+      headers: {
+        "User-Agent": new UserAgent().toString(),
+        origin: "https://howlongtobeat.com",
+        referer: "https://howlongtobeat.com",
+      },
+    });
+
+    const html = res.data;
+    const $ = cheerio.load(html);
+
+    const scripts = $("script[src]");
+
+    for (const el of scripts) {
+      const src = $(el).attr("src") as string;
+
+      if (!src.includes("_app-")) {
+        continue;
+      }
+
+      const scriptUrl = HltbSearch.BASE_URL + src;
+
+      try {
+        const res = await axios.get(scriptUrl, {
+          headers: {
+            "User-Agent": new UserAgent().toString(),
+            origin: "https://howlongtobeat.com",
+            referer: "https://howlongtobeat.com",
+          },
+        });
+
+        const scriptText = res.data;
+        const matches = [...scriptText.matchAll(HltbSearch.SEARCH_KEY_PATTERN)];
+        return matches[0][1];
+      } catch (error) {
+        continue;
+      }
+    }
+
+    throw new Error("Could not find search key");
   }
 }

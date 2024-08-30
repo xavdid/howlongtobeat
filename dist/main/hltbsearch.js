@@ -1,63 +1,70 @@
 "use strict";
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const axios = require('axios');
-const UserAgent = require('user-agents');
+exports.HltbSearch = void 0;
+const axios = require("axios");
+const UserAgent = require("user-agents");
+const cheerio = require("cheerio");
 /**
  * Takes care about the http connection and response handling
  */
 class HltbSearch {
     constructor() {
         this.payload = {
-            "searchType": "games",
-            "searchTerms": [],
-            "searchPage": 1,
-            "size": 20,
-            "searchOptions": {
-                "games": {
-                    "userId": 0,
-                    "platform": "",
-                    "sortCategory": "popular",
-                    "rangeCategory": "main",
-                    "rangeTime": {
-                        "min": 0,
-                        "max": 0
+            searchType: "games",
+            searchTerms: [],
+            searchPage: 1,
+            size: 20,
+            searchOptions: {
+                games: {
+                    userId: 0,
+                    platform: "",
+                    sortCategory: "popular",
+                    rangeCategory: "main",
+                    rangeTime: {
+                        min: 0,
+                        max: 0,
                     },
-                    "gameplay": {
-                        "perspective": "",
-                        "flow": "",
-                        "genre": ""
+                    gameplay: {
+                        perspective: "",
+                        flow: "",
+                        genre: "",
                     },
-                    "modifier": ""
+                    modifier: "",
                 },
-                "users": {
-                    "sortCategory": "postcount"
+                users: {
+                    sortCategory: "postcount",
                 },
-                "filter": "",
-                "sort": 0,
-                "randomizer": 0
-            }
+                filter: "",
+                sort: 0,
+                randomizer: 0,
+            },
         };
     }
     detailHtml(gameId, signal) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                let result = yield axios.get(`${HltbSearch.DETAIL_URL}${gameId}`, {
+                let result = yield axios
+                    .get(`${HltbSearch.DETAIL_URL}${gameId}`, {
                     headers: {
-                        'User-Agent': new UserAgent().toString(),
-                        'origin': 'https://howlongtobeat.com',
-                        'referer': 'https://howlongtobeat.com'
+                        "User-Agent": new UserAgent().toString(),
+                        origin: "https://howlongtobeat.com",
+                        referer: "https://howlongtobeat.com",
                     },
                     timeout: 20000,
                     signal,
-                }).catch(e => { throw e; });
+                })
+                    .catch((e) => {
+                    throw e;
+                });
                 return result.data;
             }
             catch (error) {
@@ -72,18 +79,21 @@ class HltbSearch {
             }
         });
     }
-    search(query, signal) {
-        return __awaiter(this, void 0, void 0, function* () {
+    search(query_1, signal_1) {
+        return __awaiter(this, arguments, void 0, function* (query, signal, retry = true) {
             // Use built-in javascript URLSearchParams as a drop-in replacement to create axios.post required data param
             let search = Object.assign({}, this.payload);
             search.searchTerms = query;
             try {
-                let result = yield axios.post(HltbSearch.SEARCH_URL, search, {
+                // only search scripts lazily
+                this.searchKey || (this.searchKey = yield this.getSearchKey());
+                const searchUrlWithKey = HltbSearch.SEARCH_URL + this.searchKey;
+                let result = yield axios.post(searchUrlWithKey, search, {
                     headers: {
-                        'content-type': 'application/json',
-                        'origin': 'https://howlongtobeat.com/',
-                        'referer': 'https://howlongtobeat.com/',
-                        'user-agent': new UserAgent()
+                        "User-Agent": new UserAgent().toString(),
+                        "content-type": "application/json",
+                        origin: "https://howlongtobeat.com/",
+                        referer: "https://howlongtobeat.com/",
                     },
                     timeout: 20000,
                     signal,
@@ -95,6 +105,12 @@ class HltbSearch {
                 if (error) {
                     throw new Error(error);
                 }
+                else if (error.response.status === 404 && retry) {
+                    // key maybe stale
+                    this.searchKey = null;
+                    // don't retry on the second one, could be a real 404
+                    return this.search(query, signal, false);
+                }
                 else if (error.response.status !== 200) {
                     throw new Error(`Got non-200 status code from howlongtobeat.com [${error.response.status}]
           ${JSON.stringify(error.response)}
@@ -103,12 +119,48 @@ class HltbSearch {
             }
         });
     }
+    getSearchKey() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const res = yield axios.get(HltbSearch.BASE_URL, {
+                headers: {
+                    "User-Agent": new UserAgent().toString(),
+                    origin: "https://howlongtobeat.com",
+                    referer: "https://howlongtobeat.com",
+                },
+            });
+            const html = res.data;
+            const $ = cheerio.load(html);
+            const scripts = $("script[src]");
+            for (const el of scripts) {
+                const src = $(el).attr("src");
+                if (!src.includes("_app-")) {
+                    continue;
+                }
+                const scriptUrl = HltbSearch.BASE_URL + src;
+                try {
+                    const res = yield axios.get(scriptUrl, {
+                        headers: {
+                            "User-Agent": new UserAgent().toString(),
+                            origin: "https://howlongtobeat.com",
+                            referer: "https://howlongtobeat.com",
+                        },
+                    });
+                    const scriptText = res.data;
+                    const matches = [...scriptText.matchAll(HltbSearch.SEARCH_KEY_PATTERN)];
+                    return matches[0][1];
+                }
+                catch (error) {
+                    continue;
+                }
+            }
+            throw new Error("Could not find search key");
+        });
+    }
 }
-HltbSearch.BASE_URL = 'https://howlongtobeat.com/';
-HltbSearch.DETAIL_URL = `${HltbSearch.BASE_URL}game?id=`;
-// this smells like they don't want people hitting this endpoint
-// pulled from the network tab on 2024-08-01; it may change again
-HltbSearch.SEARCH_URL = `${HltbSearch.BASE_URL}api/search/5683ebd079f1c360`;
-HltbSearch.IMAGE_URL = `${HltbSearch.BASE_URL}games/`;
 exports.HltbSearch = HltbSearch;
+HltbSearch.BASE_URL = "https://howlongtobeat.com/";
+HltbSearch.DETAIL_URL = `${HltbSearch.BASE_URL}game?id=`;
+HltbSearch.SEARCH_URL = `${HltbSearch.BASE_URL}api/search/`;
+HltbSearch.IMAGE_URL = `${HltbSearch.BASE_URL}games/`;
+HltbSearch.SEARCH_KEY_PATTERN = /"\/api\/search\/".concat\("([a-zA-Z0-9]+)"\)/g;
 //# sourceMappingURL=hltbsearch.js.map

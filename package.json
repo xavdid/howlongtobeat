@@ -9,7 +9,7 @@
     "pretest": "tsc --sourcemap",
     "test": "nyc mocha dist/test/**/*.test.js",
     "integrationtest": "nyc mocha dist/test/*.integration.test.js",
-    "posttest": "nyc report --reporter=json && codecov -f coverage/*.json"
+    "posttest": "nyc report --reporter=json"
   },
   "repository": {
     "type": "git",
@@ -32,7 +32,6 @@
     "@types/node": "^22.5.1",
     "chai": "^3.5.0",
     "chai-as-promised": "^6.0.0",
-    "codecov": "^3.7.1",
     "hoek": "^5.0.4",
     "mocha": "^10.0.0",
     "nyc": "^15.0.0",
